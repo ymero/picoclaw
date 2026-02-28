@@ -1,0 +1,387 @@
+# PicoClaw Architecture Diagrams
+
+## 1. System Overview
+
+```mermaid
+flowchart TB
+    subgraph "User Interface Layer"
+        CLI["CLI<br/>picoclaw agent/gateway"]
+        TUI["TUI Launcher<br/>launcher-tui"]
+    end
+
+    subgraph "Communication Channels"
+        TG[Telegram]
+        DC[Discord]
+        WA[WhatsApp]
+        FS[飞书]
+        QQ[QQ]
+        WC[企业微信]
+        DT[钉钉]
+        SL[Slack]
+        MC[MaixCam]
+        Pico[Pico Device]
+    end
+
+    subgraph "Core Services"
+        GW[Gateway]
+        MB[Message Bus]
+        AL[Agent Loop]
+    end
+
+    subgraph "Agent Engine"
+        REG[Agent Registry]
+        INST[Agent Instance]
+        SESS[Session Manager]
+        CTX[Context Manager]
+    end
+
+    subgraph "Tools Layer"
+        WEB[Web Search]
+        WFB[Web Fetch]
+        MSG[Message Tool]
+        I2C[I2C Hardware]
+        SPI[SPI Hardware]
+        SKL[Skills]
+        SPN[Spawn Subagent]
+    end
+
+    subgraph "LLM Providers"
+        OAI[OpenAI Compatible]
+        ANT[Anthropic Claude]
+        OLL[Ollama Local]
+        ZHP[智谱 GLM]
+        DS[DeepSeek]
+        GR[Groq]
+    end
+
+    subgraph "Infrastructure"
+        CFG[Config]
+        ST[State]
+        LOG[Logger]
+        CR[Cron]
+        HB[Heartbeat]
+        HL[Health]
+        AUTH[Auth]
+        MED[Media]
+        RUT[Routing]
+    end
+
+    CLI --> GW
+    TUI --> GW
+    
+    TG -.-> GW
+    DC -.-> GW
+    WA -.-> GW
+    FS -.-> GW
+    QQ -.-> GW
+    WC -.-> GW
+    DT -.-> GW
+    SL -.-> GW
+    MC -.-> GW
+    Pico -.-> GW
+    
+    GW --> MB
+    MB --> AL
+    AL --> REG
+    REG --> INST
+    INST --> SESS
+    INST --> CTX
+    INST --> WEB
+    INST --> MSG
+    INST --> SKL
+    
+    WEB --> OAI
+    WEB --> ANT
+    WEB --> OLL
+    WEB --> ZHP
+    WEB --> DS
+    WEB --> GR
+    
+    MSG --> MB
+    MB --> TG
+    MB --> DC
+    MB --> WA
+    MB --> FS
+    MB --> QQ
+    MB --> WC
+    MB --> DT
+    MB --> SL
+    MB --> MC
+    MB --> Pico
+```
+
+## 2. Message Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Channel
+    participant G as Gateway
+    participant B as MessageBus
+    participant A as AgentLoop
+    participant T as Tools
+    participant P as LLM Provider
+    participant O as Outbound Channel
+
+    U->>C: Send Message
+    C->>G: Inbound Message
+    G->>B: PublishInbound()
+    
+    rect rgb(240, 248, 255)
+        note right of B: Agent Processing Loop
+        loop While Tool Calls Exist
+            B->>A: ConsumeInbound()
+            A->>A: Handle Commands
+            
+            alt Requires LLM
+                A->>P: Chat()
+                P-->>A: Response
+                A->>T: Execute Tools
+                T-->>A: Tool Result
+                A->>P: Continue Chat
+            end
+        end
+    end
+    
+    A->>B: PublishOutbound()
+    B->>O: Send Response
+    O-->>U: Display
+```
+
+## 3. Module Dependencies
+
+```mermaid
+flowchart TB
+    subgraph "cmd/picoclaw"
+        MAIN[main.go]
+    end
+
+    subgraph "pkg/config"
+        CFG[config]
+    end
+
+    subgraph "pkg/logger"
+        LOG[logger]
+    end
+
+    subgraph "pkg/bus"
+        BUS[message bus]
+    end
+
+    subgraph "pkg/agent"
+        AGT[agent loop]
+        REG[registry]
+        INS[instance]
+    end
+
+    subgraph "pkg/providers"
+        PRO[provider factory]
+        OAI[openai compat]
+        ANT[anthropic]
+    end
+
+    subgraph "pkg/channels"
+        CH[channel manager]
+        TG[telegram]
+        DC[discord]
+    end
+
+    subgraph "pkg/tools"
+        TOL[tools]
+        WEB[web search]
+        MSG[message]
+    end
+
+    subgraph "pkg/session"
+        SES[session manager]
+    end
+
+    subgraph "pkg/state"
+        STA[state manager]
+    end
+
+    subgraph "pkg/skills"
+        SKL[skills registry]
+    end
+
+    MAIN --> CFG
+    MAIN --> LOG
+    MAIN --> BUS
+    MAIN --> AGT
+    
+    AGT --> REG
+    AGT --> INS
+    AGT --> TOL
+    AGT --> SES
+    AGT --> BUS
+    
+    REG --> CFG
+    INS --> PRO
+    
+    TOL --> WEB
+    TOL --> MSG
+    TOL --> SKL
+    TOL --> PRO
+    
+    CH --> BUS
+    CH --> TG
+    CH --> DC
+    
+    BUS --> STA
+    BUS --> SES
+```
+
+## 4. Configuration Structure
+
+```mermaid
+erDiagram
+    CONFIG ||--|| AGENTS : contains
+    CONFIG ||--|| MODEL_LIST : contains
+    CONFIG ||--|| CHANNELS : contains
+    CONFIG ||--|| TOOLS : contains
+    CONFIG ||--|| HEARTBEAT : contains
+    
+    AGENTS ||--|| AGENT : defaults
+    
+    CHANNELS ||--|| TELEGRAM : contains
+    CHANNELS ||--|| DISCORD : contains
+    CHANNELS ||--|| WHATSAPP : contains
+    CHANNELS ||--|| FEISHU : contains
+    
+    TOOLS ||--|| WEB : contains
+    TOOLS ||--|| CRON : contains
+    TOOLS ||--|| SKILLS : contains
+    
+    WEB ||--|| BRAVE : contains
+    WEB ||--|| DUCKDUCKGO : contains
+    WEB ||--|| TAVILY : contains
+```
+
+## 5. Channel Integration
+
+```mermaid
+flowchart LR
+    subgraph External
+        Users[Users]
+    end
+    
+    subgraph Channels
+        IM[Instant Messenger]
+        IoT[IoT Devices]
+    end
+    
+    subgraph "pkg/channels"
+        TG[Telegram]
+        DC[Discord]
+        WA[WhatsApp]
+        QQ[QQ]
+        FS[飞书]
+        WC[企业微信]
+        DT[钉钉]
+        SL[Slack]
+        
+        MC[MaixCam]
+        Pico[Pico]
+    end
+    
+    Users --> IM
+    Users --> IoT
+    
+    IM --> TG
+    IM --> DC
+    IM --> WA
+    IM --> QQ
+    IM --> FS
+    IM --> WC
+    IM --> DT
+    IM --> SL
+    
+    IoT --> MC
+    IoT --> Pico
+```
+
+## 6. Tool System
+
+```mermaid
+flowchart TB
+    subgraph "Agent Tools"
+        WEB[Web Search]
+        WFB[Web Fetch]
+        MSG[Message]
+        I2C[I2C]
+        SPI[SPI]
+        
+        SKL[Find Skills]
+        INST[Install Skill]
+        
+        SPN[Spawn Subagent]
+    end
+    
+    subgraph "Search Providers"
+        BRAVE[Brave Search]
+        DDG[DuckDuckGo]
+        TAV[Tavily]
+        PER[Perplexity]
+    end
+    
+    subgraph "LLM Backends"
+        OAI[OpenAI]
+        ANT[Claude]
+        OLL[Ollama]
+        ZHP[智谱]
+        DS[DeepSeek]
+    end
+    
+    WEB --> BRAVE
+    WEB --> DDG
+    WEB --> TAV
+    WEB --> PER
+    
+    SKL --> OAI
+    INST --> OAI
+    SPN --> OAI
+    
+    MSG --> ANT
+    MSG --> OAI
+```
+
+## 7. Deployment Options
+
+```mermaid
+flowchart LR
+    subgraph Hardware
+        RPI["Raspberry Pi<br/>$35"]
+        LIC[LicheeRV Nano<br/>$9.9]
+        NANOKVM[NanoKVM<br/>$30-50]
+        MAIX[MaixCAM<br/>$50]
+        AND[Android Phone<br/>Termux]
+        X86[x86 PC<br/>Any Linux]
+    end
+    
+    subgraph Software
+        CON[Container<br/>Docker]
+        BIN[Binary<br/>Single file]
+        SRC[Source<br/>make build]
+    end
+    
+    RPI --> CON
+    RPI --> BIN
+    LIC --> BIN
+    NANOKVM --> BIN
+    MAIX --> BIN
+    AND --> SRC
+    X86 --> CON
+    X86 --> BIN
+    X86 --> SRC
+```
+
+## 8. Key Features Matrix
+
+| Feature | Description |
+|---------|-------------|
+| Memory | <10MB RAM footprint |
+| Startup | <1 second boot time |
+| Platforms | RISC-V, ARM, x86 |
+| Channels | 10+ messaging platforms |
+| Providers | 6+ LLM backends |
+| Tools | Web, Hardware, Skills |
